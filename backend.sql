@@ -21,7 +21,8 @@ create table if not exists products (
   description text,
   active boolean not null default true,
   created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now()
+  updated_at timestamptz not null default now(),
+  constraint products_ean_not_blank check (ean is null or length(trim(ean)) > 0)
 );
 
 create table if not exists offers (
@@ -29,21 +30,22 @@ create table if not exists offers (
   product_id uuid not null references products(id) on delete cascade,
   shop_id uuid not null references shops(id) on delete cascade,
   price numeric(12,2) not null check (price >= 0),
-  old_price numeric(12,2),
+  old_price numeric(12,2) check (old_price is null or old_price >= price),
   shipping_cost numeric(12,2) not null default 0 check (shipping_cost >= 0),
   stock_status text,
   product_url text not null,
   image_url text,
   last_checked_at timestamptz not null default now(),
   active boolean not null default true,
-  unique(product_id, shop_id)
+  unique(product_id, shop_id),
+  constraint offers_url_not_blank check (length(trim(product_url)) > 0)
 );
 
 create table if not exists price_history (
   id bigserial primary key,
   offer_id uuid not null references offers(id) on delete cascade,
-  price numeric(12,2) not null,
-  shipping_cost numeric(12,2) not null default 0,
+  price numeric(12,2) not null check (price >= 0),
+  shipping_cost numeric(12,2) not null default 0 check (shipping_cost >= 0),
   recorded_at timestamptz not null default now()
 );
 
@@ -60,6 +62,17 @@ begin new.updated_at = now(); return new; end; $$;
 
 drop trigger if exists products_updated_at on products;
 create trigger products_updated_at before update on products for each row execute function set_updated_at();
+
+create or replace function set_offer_checked_at() returns trigger language plpgsql as $$
+begin
+  if new.price is distinct from old.price or new.shipping_cost is distinct from old.shipping_cost or new.stock_status is distinct from old.stock_status then
+    new.last_checked_at = now();
+  end if;
+  return new;
+end; $$;
+
+drop trigger if exists offers_checked_at on offers;
+create trigger offers_checked_at before update on offers for each row execute function set_offer_checked_at();
 
 create or replace view product_comparison as
 select p.id, p.ean, p.name, p.brand, p.category, p.image_url,
