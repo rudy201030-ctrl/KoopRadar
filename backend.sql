@@ -48,9 +48,18 @@ create table if not exists price_history (
 );
 
 create index if not exists products_name_idx on products using gin (to_tsvector('simple', name));
+create index if not exists products_ean_idx on products(ean);
+create index if not exists products_category_idx on products(category);
 create index if not exists offers_product_idx on offers(product_id);
 create index if not exists offers_shop_idx on offers(shop_id);
+create index if not exists offers_total_price_idx on offers((price + shipping_cost));
 create index if not exists history_offer_time_idx on price_history(offer_id, recorded_at desc);
+
+create or replace function set_updated_at() returns trigger language plpgsql as $$
+begin new.updated_at = now(); return new; end; $$;
+
+drop trigger if exists products_updated_at on products;
+create trigger products_updated_at before update on products for each row execute function set_updated_at();
 
 create or replace view product_comparison as
 select p.id, p.ean, p.name, p.brand, p.category, p.image_url,
@@ -62,5 +71,20 @@ join offers o on o.product_id=p.id and o.active=true
 where p.active=true
 group by p.id;
 
--- RLS can be enabled when the Supabase project is connected. Public read access
--- should expose only safe product/offer fields; ingestion remains server-side.
+-- Safe public read policies. Writes/ingestion must use a server-side key.
+alter table shops enable row level security;
+alter table products enable row level security;
+alter table offers enable row level security;
+alter table price_history enable row level security;
+
+drop policy if exists public_read_active_shops on shops;
+create policy public_read_active_shops on shops for select using (active = true);
+
+drop policy if exists public_read_active_products on products;
+create policy public_read_active_products on products for select using (active = true);
+
+drop policy if exists public_read_active_offers on offers;
+create policy public_read_active_offers on offers for select using (active = true);
+
+-- Price history is intentionally not publicly exposed by default.
+-- Service-role/server code can read and write it securely.
