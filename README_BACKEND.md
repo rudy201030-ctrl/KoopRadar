@@ -1,49 +1,44 @@
-# KoopRader — production backend
+# KoopRader — productie-backend
 
-## Architecture
-- Frontend: static HTML/CSS/JavaScript on GitHub Pages.
-- Database: PostgreSQL via Supabase.
-- API: Supabase Edge Functions behind an `/api/*` routing layer.
-- Ingestion: approved retailer feeds, affiliate feeds, or APIs whose terms permit the intended use.
-- Updates: scheduled jobs refresh offers and append price history.
+## Architectuur
+- Frontend: statische HTML/CSS/JavaScript op GitHub Pages of de bestaande hosting.
+- Database: PostgreSQL via Supabase wanneer de API daarop wordt aangesloten.
+- API: `/api/search`, `/api/products/<id>` en `/api/health` via de ingestelde API-laag.
+- Ingestion: goedgekeurde retailer-, affiliate- en productfeeds, waaronder de bestaande Awin-feedconfiguratie wanneer die server-side beschikbaar is.
+- Updates: geplande imports vernieuwen aanbiedingen en bewaren prijswijzigingen.
 
-## API functions
-- `supabase/functions/search/index.ts` — search, filtering and offer comparison.
-- `supabase/functions/product/index.ts` — product details and current offers. Accepts both `/api/products/<id>` routing and `?id=<id>`.
+## API-functies
+- `supabase/functions/search/index.ts` — zoeken, filteren en aanbiedingen vergelijken.
+- `supabase/functions/product/index.ts` — productdetails en actuele aanbiedingen.
 - `supabase/functions/health/index.ts` — API health check.
 
-## Required production setup
-1. Create a Supabase project.
-2. Run `backend.sql` in the Supabase SQL editor.
-3. Deploy the three Edge Functions.
-4. Configure `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` as server-side secrets. Never expose the service-role key in browser code.
-5. Configure an API gateway/rewrite for `/api/search`, `/api/products/<id>` and `/api/health`.
-6. Configure the frontend API origin as `window.KOOPRADER_API_URL` in the deployment environment/configuration.
-7. Connect approved retailer/affiliate feeds and credentials server-side.
-8. Schedule ingestion and verify price, shipping, stock, product URL and `last_checked_at`.
+## Productie-eisen
+1. Feed- en affiliategegevens blijven uitsluitend server-side.
+2. Gebruik alleen echte, actuele feedproducten; nooit verzonnen prijzen of winkels.
+3. Normaliseer minimaal EAN, naam, merk, categorie, prijs, verzending, voorraad, product-URL, afbeelding en controletijdstip.
+4. Vergelijk op totale kosten: productprijs + verzending.
+5. Valideer prijzen, identifiers en URL's vóór publicatie.
+6. Bewaar prijswijzigingen in `price_history`.
+7. Toon de actualiteit van de prijs aan de gebruiker.
+8. Respecteer feedvoorwaarden, affiliatevoorwaarden en rate limits.
 
-## Data quality and safety
-- Never invent live prices, stock, retailer URLs or review scores.
-- Compare using total cost: product price + shipping.
-- Reject invalid/negative prices and malformed URLs.
-- Prefer EAN as the canonical product identifier when supplied.
-- Record price changes in `price_history`.
-- Show freshness timestamps to users.
-- Respect feed/API terms, affiliate requirements, rate limits and applicable crawling rules.
+## Beveiliging
+- Geen Awin-feed-URL, API-key, affiliate-secret of Supabase service-role key in browsercode, GitHub of publieke API-responses.
+- Imports zijn atomair: eerst downloaden, parseren en valideren; pas daarna de actieve productdata vervangen.
+- Bij een mislukte import blijft de laatst geldige productdataset behouden.
 
-## Frontend modes
-**Production mode:** when `KOOPRADER_API_URL` is configured and the API returns data, the site displays API products and current offers.
-
-**Demo fallback:** when the API is unavailable or unconfigured, the site uses a small local demonstration dataset. Demo values must not be represented as live retailer prices.
+## Frontend
+De productie-frontend toont uitsluitend data die via de productie-API beschikbaar is. Als de feed/API niet beschikbaar is, toont KoopRader een duidelijke tijdelijke melding en géén demo-producten of nepprijzen.
 
 ## Go-live checklist
-- [ ] Supabase project created
-- [ ] `backend.sql` applied
-- [ ] Edge Functions deployed
-- [ ] `/api/*` routing and CORS configured
-- [ ] Approved retailer/affiliate feeds connected
-- [ ] Scheduled ingestion running
-- [ ] Live search and product-detail API tests pass
-- [ ] GitHub Pages custom domain verified
-- [ ] DNS and HTTPS verified
-- [ ] Mobile/accessibility smoke test passed
+- [x] Productie frontend aangesloten op API-routes
+- [x] Zoeken, categorieën en sortering voorbereid
+- [x] Productdetail en winkel-links voorbereid
+- [x] SEO canonical, robots en sitemap aanwezig
+- [x] Geen demo-fallback in productiefrontend
+- [ ] Server-side Awin-feed/import daadwerkelijk aangesloten op de productieomgeving
+- [ ] API-routing op de productiehost actief
+- [ ] Automatische feed-import/cron actief
+- [ ] Live product-, prijs- en affiliate-click tests uitvoeren
+- [ ] DNS/HTTPS definitief verifiëren
+- [ ] Mobiele en toegankelijkheidstest uitvoeren
