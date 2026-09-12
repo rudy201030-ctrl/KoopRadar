@@ -6,7 +6,12 @@
   const esc = s => String(s ?? "").replace(/[&<>\"']/g, m => ({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#039;"}[m]));
   let products = [];
   const base = String(window.KOOPRADER_API_URL || "").replace(/\/$/, "");
-  const normalize = p => ({...p, id:p.id ?? p.ean ?? p.sku ?? p.slug, name:p.name || "Onbekend product", brand:p.brand || "", category:p.category || "", image_url:p.image_url || p.image || "", description:p.description || "", price:Number(p.lowest_total_price ?? p.price), oldPrice:Number(p.old_price ?? p.oldPrice), shops:Number(p.shop_count ?? p.shops ?? (p.offers?.length || 0)), offers:Array.isArray(p.offers) ? p.offers.map(o => ({...o,total_price:o.total_price ?? (Number(o.price)+Number(o.shipping_cost||0)),shop_name:o.shop_name||o.shop?.name||"Winkel"})) : []});
+  const normalize = p => {
+    const price = Number(p.lowest_total_price ?? p.price);
+    const old = Number(p.old_price ?? p.oldPrice);
+    const offers = Array.isArray(p.offers) ? p.offers.map(o => ({...o, total_price:o.total_price ?? (Number(o.price)+Number(o.shipping_cost||0)), shop_name:o.shop_name||o.shop?.name||"Winkel"})) : [];
+    return {...p, id:p.id ?? p.ean ?? p.sku ?? p.slug, name:p.name||"Onbekend product", brand:p.brand||"", category:p.category||"", image_url:p.image_url||p.image||"", description:p.description||"", price, oldPrice:Number.isFinite(old)&&old>price?old:0, shops:Number(p.shop_count??p.shops??offers.length), offers};
+  };
   const sortProducts = (a,m) => [...a].sort((x,y) => m === "name" ? String(x.name).localeCompare(String(y.name),"nl") : m === "saving" ? ((y.oldPrice-y.price)-(x.oldPrice-x.price)) : m === "shops" ? y.shops-x.shops || x.price-y.price : x.price-y.price);
   const card = p => `<article class="deal-card"><div class="deal-visual">${p.image_url ? `<img src="${esc(p.image_url)}" alt="${esc(p.name)}" loading="lazy" referrerpolicy="no-referrer">` : `<div class="deal-placeholder">${esc(p.brand||"KoopRader")}</div>`}</div><div class="deal-body"><span class="badge">Actuele feed</span><h3>${esc(p.name)}</h3><div class="shop">${esc(p.brand)}${p.category ? ` · ${esc(p.category)}` : ""}${p.shops ? ` · ${esc(p.shops)} winkels` : ""}</div><div class="prices"><strong>${money(p.price)}</strong>${p.oldPrice > p.price ? `<del>${money(p.oldPrice)}</del>` : ""}</div><div class="saving">${p.oldPrice > p.price ? `Bespaar ${money(p.oldPrice-p.price)}` : "Actuele prijs"}</div><button class="deal-btn" data-id="${esc(p.id)}">Bekijk prijsvergelijking <span>→</span></button></div></article>`;
   function render(list){ if(!grid)return; grid.innerHTML=list.map(card).join(""); if(count)count.textContent=`${list.length} ${list.length===1?"resultaat":"resultaten"}`; if(empty)empty.hidden=list.length!==0; }
