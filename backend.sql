@@ -58,14 +58,19 @@ create index if not exists offers_total_price_idx on offers((price + shipping_co
 create index if not exists history_offer_time_idx on price_history(offer_id, recorded_at desc);
 
 create or replace function set_updated_at() returns trigger language plpgsql as $$
-begin new.updated_at = now(); return new; end; $$;
+begin
+  new.updated_at = now();
+  return new;
+end; $$;
 
 drop trigger if exists products_updated_at on products;
 create trigger products_updated_at before update on products for each row execute function set_updated_at();
 
 create or replace function set_offer_checked_at() returns trigger language plpgsql as $$
 begin
-  if new.price is distinct from old.price or new.shipping_cost is distinct from old.shipping_cost or new.stock_status is distinct from old.stock_status then
+  if new.price is distinct from old.price
+     or new.shipping_cost is distinct from old.shipping_cost
+     or new.stock_status is distinct from old.stock_status then
     new.last_checked_at = now();
   end if;
   return new;
@@ -73,6 +78,28 @@ end; $$;
 
 drop trigger if exists offers_checked_at on offers;
 create trigger offers_checked_at before update on offers for each row execute function set_offer_checked_at();
+
+-- Automatically record a price snapshot on first insert and whenever
+-- the product price or shipping cost changes. Unchanged imports do not
+-- create duplicate history rows.
+create or replace function record_offer_price_history() returns trigger language plpgsql as $$
+begin
+  if tg_op = 'INSERT' then
+    insert into price_history (offer_id, price, shipping_cost)
+    values (new.id, new.price, new.shipping_cost);
+  elsif tg_op = 'UPDATE'
+        and (new.price is distinct from old.price
+             or new.shipping_cost is distinct from old.shipping_cost) then
+    insert into price_history (offer_id, price, shipping_cost)
+    values (new.id, new.price, new.shipping_cost);
+  end if;
+  return new;
+end; $$;
+
+drop trigger if exists offers_price_history on offers;
+create trigger offers_price_history
+after insert or update of price, shipping_cost on offers
+for each row execute function record_offer_price_history();
 
 create or replace view product_comparison as
 select p.id, p.ean, p.name, p.brand, p.category, p.image_url,
